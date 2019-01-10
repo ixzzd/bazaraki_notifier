@@ -11,6 +11,7 @@ import (
   "github.com/PuerkitoBio/goquery"
   "github.com/Syfaro/telegram-bot-api"
   "time"
+  "net/http"
 )
 
 func _check(err error) {
@@ -128,6 +129,36 @@ func telegramBot() {
         url := update.Message.Text
 
         fmt.Println("request: " + url)
+
+        // Request the HTML page.
+        res, err := http.Get(url)
+
+        if err != nil {
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "URL is wrong"))
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Correct URL sample: https://www.bazaraki.com/real-estate/houses-and-villas-rent/lemesos-district-limassol/?price_min=500&price_max=1000"))
+          continue
+        }
+
+        defer res.Body.Close()
+        if res.StatusCode != 200 {
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "URL is wrong"))
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Correct URL sample: https://www.bazaraki.com/real-estate/houses-and-villas-rent/lemesos-district-limassol/?price_min=500&price_max=1000"))
+          continue
+        }
+
+        // Load the HTML document
+        doc, err := goquery.NewDocumentFromReader(res.Body)
+        if err != nil {
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "URL is wrong"))
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Correct URL sample: https://www.bazaraki.com/real-estate/houses-and-villas-rent/lemesos-district-limassol/?price_min=500&price_max=1000"))
+          continue
+        }
+
+        if len(doc.Find(".announcement-container").Nodes) == 0 {
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "URL is wrong"))
+          bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Correct URL sample: https://www.bazaraki.com/real-estate/houses-and-villas-rent/lemesos-district-limassol/?price_min=500&price_max=1000"))
+          continue
+        }
 
         // Create advertisement list
         os.MkdirAll(chat_folder, os.ModePerm);
