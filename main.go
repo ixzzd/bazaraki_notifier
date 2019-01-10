@@ -12,7 +12,10 @@ import (
   "github.com/Syfaro/telegram-bot-api"
   "time"
   "net/http"
+  "sync"
 )
+
+var mutex sync.Mutex
 
 func _check(err error) {
   if err != nil {
@@ -86,7 +89,6 @@ func telegramBot() {
 
   for update := range updates {
     if update.Message == nil {
-      send_updates()
       continue
     }
 
@@ -180,6 +182,7 @@ func telegramBot() {
 
         msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Now you are following only this url: " + url)
         bot.Send(msg)
+        check_updates(false)
       }
     } else {
       msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Send URL for subscribe")
@@ -189,7 +192,10 @@ func telegramBot() {
   }
 }
 
-func send_updates() {
+func check_updates(notify bool) {
+  mutex.Lock()
+  defer mutex.Unlock()
+
   bot, err := tgbotapi.NewBotAPI(os.Getenv("TOKEN"))
   _check(err)
 
@@ -220,12 +226,14 @@ func send_updates() {
             if ! Contains(lines, link) {
               lines = append(lines, link)
 
-              advUrl := "https://www.bazaraki.com" + link
-              chat_id_int, err := strconv.ParseInt(chat_id, 10, 64)
-              _check(err)
+              if notify {
+                advUrl := "https://www.bazaraki.com" + link
+                chat_id_int, err := strconv.ParseInt(chat_id, 10, 64)
+                _check(err)
 
-              msg := tgbotapi.NewMessage(chat_id_int, advUrl)
-              bot.Send(msg)
+                msg := tgbotapi.NewMessage(chat_id_int, advUrl)
+                bot.Send(msg)
+              }
             }
           }
         })
@@ -239,9 +247,18 @@ func send_updates() {
 
 func main() {
   go telegramBot()
+
+  checking_interval := 300
+
+  if os.Getenv("CHECKING_INTERVAL") != "" {
+    parsed_int, err := strconv.Atoi(os.Getenv("CHECKING_INTERVAL"))
+    _check(err)
+    checking_interval = parsed_int
+  }
+
   for {
-    send_updates()
-    time.Sleep(time.Second * 10)
+    check_updates(true)
+    time.Sleep(time.Second * time.Duration(checking_interval))
   }
 }
 

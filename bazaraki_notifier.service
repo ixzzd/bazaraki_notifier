@@ -8,6 +8,7 @@ RestartSec=5s
 Environment=NOTIFY_TO_CHAT=
 Environment=TOKEN=
 Environment=DATA_FOLDER=
+Environment=CHECKING_INTERVAL=600
 ExecStart=
 
 [Install]
