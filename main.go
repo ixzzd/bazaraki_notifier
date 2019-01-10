@@ -5,14 +5,33 @@ import (
   "regexp"
   "bufio"
   "os"
+  "reflect"
+  "strconv"
+  "io/ioutil"
   "github.com/PuerkitoBio/goquery"
   "github.com/Syfaro/telegram-bot-api"
+  "time"
 )
 
 func _check(err error) {
   if err != nil {
     panic(err)
   }
+}
+
+func createFile(path string) {
+  // check if file exists
+  var _, err = os.Stat(path)
+
+  // create file if not exists
+  if os.IsNotExist(err) {
+    var file, err = os.Create(path)
+    _check(err)
+
+    defer file.Close()
+  }
+
+  fmt.Println("File Created Successfully", path)
 }
 
 // readLines reads a whole file into memory
@@ -56,35 +75,148 @@ func Contains(a []string, x string) bool {
   return false
 }
 
-func main() {
-  url := "https://www.bazaraki.com/real-estate/houses-and-villas-rent/?price_max=1000&city_districts=5730&city_districts=5737&city_districts=5049&city_districts=5682&city_districts=5683&city_districts=5684&city_districts=5687&city_districts=5689&city_districts=5690&city_districts=5691&city_districts=5692&city_districts=5693&city_districts=5695"
+func doEvery(d time.Duration, f func(time.Time)) {
+  for x := range time.Tick(d) {
+    f(x)
+  }
+}
 
-  fmt.Println("request: " + url)
-
-  doc, err := goquery.NewDocument(url)
+func telegramBot() {
+  bot, err := tgbotapi.NewBotAPI(os.Getenv("TOKEN"))
   _check(err)
 
-  lines, err := readLines("data")
+  u := tgbotapi.NewUpdate(0)
+
+  updates, err := bot.GetUpdatesChan(u)
+
+  for update := range updates {
+    if update.Message == nil {
+      send_updates()
+      continue
+    }
+
+    data_folder := os.Getenv("DATA_FOLDER") + "/"
+
+    // Make sure that message in text
+    if reflect.TypeOf(update.Message.Text).Kind() == reflect.String && update.Message.Text != "" {
+
+      chat_folder := data_folder + strconv.FormatInt(update.Message.Chat.ID, 10)
+
+      switch update.Message.Text {
+      case "/start":
+
+        msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Hi, i'm a Bazaraki notification bot!")
+        bot.Send(msg)
+        msg1 := tgbotapi.NewMessage(update.Message.Chat.ID, "Send me Bazaraki advertisements list URL sorted by newest to start receiving notifications.")
+        bot.Send(msg1)
+        msg2 := tgbotapi.NewMessage(update.Message.Chat.ID, "To stop receiving notifications send me /stop")
+        bot.Send(msg2)
+
+        if os.Getenv("NOTIFY_TO_CHAT") != "" {
+          chat_id_int, err := strconv.ParseInt(os.Getenv("NOTIFY_TO_CHAT"), 10, 64)
+          _check(err)
+
+          msg := tgbotapi.NewMessage(chat_id_int, "New user: @" + update.Message.From.UserName)
+          bot.Send(msg)
+        }
+
+        fmt.Println("Start chat with id:" + strconv.FormatInt(update.Message.Chat.ID, 10) + ". User: @" + update.Message.From.UserName)
+
+      case "/stop":
+        err := os.RemoveAll(chat_folder)
+        _check(err)
+
+        msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You successfully stop following all advertisements")
+        bot.Send(msg)
+
+      default:
+
+        url := update.Message.Text
+
+        fmt.Println("request: " + url)
+
+        // Create advertisement list
+        os.MkdirAll(chat_folder, os.ModePerm);
+
+        advertisements_path := chat_folder + "/advertisements"
+        os.Remove(advertisements_path)
+        createFile(advertisements_path)
+
+        createFile(chat_folder + "/sended_links")
+
+        // Write url to advertisements list
+        lines, err := readLines(advertisements_path)
+        _check(err)
+
+        lines = append(lines, url)
+
+        err = writeLines(lines, advertisements_path)
+        _check(err)
+
+        msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Now you are following only this url: " + url)
+        bot.Send(msg)
+      }
+    } else {
+      msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Send URL for subscribe")
+      bot.Send(msg)
+
+    }
+  }
+}
+
+func send_updates() {
+  bot, err := tgbotapi.NewBotAPI(os.Getenv("TOKEN"))
   _check(err)
 
-  bot, err := tgbotapi.NewBotAPI("BOT_API_KEY")
+  data_folder := os.Getenv("DATA_FOLDER") + "/"
+
+  folders, err := ioutil.ReadDir(data_folder)
   _check(err)
 
 
-  doc.Find("a").Each(func(i int, s *goquery.Selection) {
-    link, _ := s.Attr("href")
-    isAdv, _ := regexp.MatchString(`/adv/\d{7}_.*/`, link)
-    if isAdv {
-      if ! Contains(lines, link) {
-        lines = append(lines, link)
+  for _, folder := range folders {
+    if folder.IsDir() {
+      chat_id := folder.Name()
 
-        advUrl := "https://www.bazaraki.com" + link
-        msg_eg := tgbotapi.NewMessage(CHAT_ID, advUrl)
-        bot.Send(msg_eg)
+      advertisements, err := readLines(data_folder + chat_id + "/advertisements")
+      _check(err)
+
+      for _, url := range advertisements {
+        sended_links_path := data_folder + chat_id + "/sended_links"
+
+        lines, err := readLines(sended_links_path)
+        _check(err)
+
+        doc, err := goquery.NewDocument(url)
+        doc.Find("a").Each(func(i int, s *goquery.Selection) {
+          link, _ := s.Attr("href")
+          isAdv, _ := regexp.MatchString(`/adv/\d{7}_.*/`, link)
+          if isAdv {
+            if ! Contains(lines, link) {
+              lines = append(lines, link)
+
+              advUrl := "https://www.bazaraki.com" + link
+              chat_id_int, err := strconv.ParseInt(chat_id, 10, 64)
+              _check(err)
+
+              msg := tgbotapi.NewMessage(chat_id_int, advUrl)
+              bot.Send(msg)
+            }
+          }
+        })
+
+        err = writeLines(lines, sended_links_path)
+        _check(err)
       }
     }
-  })
-
- err = writeLines(lines, "data")
-  _check(err)
+  }
 }
+
+func main() {
+  go telegramBot()
+  for {
+    send_updates()
+    time.Sleep(time.Second * 10)
+  }
+}
+
