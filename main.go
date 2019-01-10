@@ -156,7 +156,7 @@ func telegramBot() {
           continue
         }
 
-        if len(doc.Find(".list-announcement").Nodes) == 0 {
+        if len(doc.Find(".list-announcement-assortiments").Nodes) == 0 {
           bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "URL is wrong"))
           bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Correct URL sample: https://www.bazaraki.com/real-estate/houses-and-villas-rent/lemesos-district-limassol/?price_min=500&price_max=1000"))
           continue
