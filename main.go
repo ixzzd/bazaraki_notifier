@@ -75,12 +75,6 @@ func Contains(a []string, x string) bool {
   return false
 }
 
-func doEvery(d time.Duration, f func(time.Time)) {
-  for x := range time.Tick(d) {
-    f(x)
-  }
-}
-
 func telegramBot() {
   bot, err := tgbotapi.NewBotAPI(os.Getenv("TOKEN"))
   _check(err)
