@@ -219,7 +219,14 @@ func check_updates(notify bool) {
         _check(err)
 
         doc, err := goquery.NewDocument(url)
-        doc.Find("a").Each(func(i int, s *goquery.Selection) {
+
+        // Remove adds from another regions
+        // Find the header
+        other_advertisments_header_index := doc.Find("ul.list-simple__output > h2.header").First().Index();
+        // Take only advertisements before header
+        advertisements := doc.Find("ul.list-simple__output").Children().Slice(0, other_advertisments_header_index);
+
+        advertisements.Find("a").Each(func(i int, s *goquery.Selection) {
           link, _ := s.Attr("href")
           isAdv, _ := regexp.MatchString(`/adv/\d{7}_.*/`, link)
           if isAdv {
