@@ -236,7 +236,10 @@ func check_updates(notify bool) {
         advertisements.Find("a").Each(func(i int, s *goquery.Selection) {
           link, _ := s.Attr("href")
           isAdv, _ := regexp.MatchString(`/adv/\d{7}_.*/`, link)
-          if isAdv {
+          // Galelry items are not relevant in most cases
+          isNotRelevantGalleryItem := s.HasClass("js-advert-gallery-item")
+
+          if isAdv && ! isNotRelevantGalleryItem {
             if ! Contains(lines, link) {
               lines = append(lines, link)
 
